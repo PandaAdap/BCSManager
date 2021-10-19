@@ -44,6 +44,8 @@ private:
 
 	int CPUCores = 0;
 
+	void EnableControl();
+	void DisableControl();
 
 	bool CheckConfigOpen();
 	bool CheckServerRunning();
@@ -55,6 +57,8 @@ private:
 	int pluginSelected = -1;
 
 	bool isconhostshow = true;
+
+	bool sd_reboot = false;
 
 // 实现
 protected:

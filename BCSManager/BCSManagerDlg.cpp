@@ -16,6 +16,8 @@
 #define new DEBUG_NEW
 #endif
 
+#define TIMER_WAIT WM_USER+001
+
 UINT MemoryTick(LPVOID lpParam);
 bool closethread = false;
 
@@ -976,7 +978,7 @@ void CBCSManagerDlg::ApplyAffinityChange()
 void CBCSManagerDlg::OnBnClickedRebootandapply()
 {
 	// TODO: 在此添加控件通知处理程序代码
- 
+
 	CString PropertiesPath, PropertiesFile;
 	PropertiesPath = ReadConfig(currentConfig, L"CorePath");
 	PropertiesFile = PropertiesPath.Mid(0, PropertiesPath.ReverseFind('\\')) + L"\\server.properties";
@@ -984,7 +986,6 @@ void CBCSManagerDlg::OnBnClickedRebootandapply()
 	CFileFind finder;
 	BOOL ifFind = finder.FindFile(PropertiesFile);
 
-	CString PID;
 	//Close Server
 	if (isServerRunning[serverSelected] == true)
 	{
@@ -997,24 +998,12 @@ void CBCSManagerDlg::OnBnClickedRebootandapply()
 			SendInstruction(L"stop");
 		}
 		isServerRunning[serverSelected] = false;
-
-		while (GetProcessName(ProcessID[serverSelected]) == L"java.exe")
-		{
-			Sleep(1000);
-		}
 	}
 
-	ApplyPluginChange();
-	ApplyAffinityChange();
-
-	//Launch Server
-	int pid = LaunchServerFromConfig(currentConfig);
-	PID.Format(L"%d", pid);
-	WriteConfig(currentConfig, L"LastProcessID", PID);
-	ProcessID[serverSelected] = pid;
-	Sleep(500);
-	SetConhostTitle(pid, ReadConfig(currentConfig, L"ServerName"),currentConfig);
-	isServerRunning[serverSelected] = true;
+	DisableControl();
+	SetWindowText(L"BungeeCord Servers Manager (等待服务端关闭...)");
+	sd_reboot = true;
+	SetTimer(TIMER_WAIT, 1000, NULL);
 
 	//SetAffinity(pid, GetAffinityMask(currentConfig));
 }
@@ -1204,6 +1193,41 @@ void CBCSManagerDlg::OnTimer(UINT_PTR nIDEvent)
 			AutoRebootTick();
 		}
 		break;
+	case TIMER_WAIT:
+		if (GetProcessName(ProcessID[serverSelected]) != L"java.exe")
+		{
+			//shutdowntimewait = 0;
+			isServerRunning[serverSelected] = false;
+			ProcessID[serverSelected] = 0;
+
+			if (sd_reboot == false)
+			{
+				configopen = false;
+				((CButton*)GetDlgItem(IDC_AutoReboot))->SetCheck(0);
+				isAutoReboot[serverSelected] = false;
+				WriteConfig(currentConfig, L"AutoReboot", L"false");
+				configopen = true;
+			}
+			else
+			{
+				ApplyPluginChange();
+				ApplyAffinityChange();
+
+				//Launch Server
+				CString PID;
+				int pid = LaunchServerFromConfig(currentConfig);
+				PID.Format(L"%d", pid);
+				WriteConfig(currentConfig, L"LastProcessID", PID);
+				ProcessID[serverSelected] = pid;
+				Sleep(500);
+				SetConhostTitle(pid, ReadConfig(currentConfig, L"ServerName"), currentConfig);
+				isServerRunning[serverSelected] = true;
+			}
+			SetWindowText(L"BungeeCord Servers Manager");
+			EnableControl();
+			KillTimer(TIMER_WAIT);
+		}
+		break;
 	}
 
 	CDialogEx::OnTimer(nIDEvent);
@@ -1267,20 +1291,10 @@ void CBCSManagerDlg::OnBnClickedShutdown()
 		{
 			SendInstruction(L"stop");
 		}
-
-		while (GetProcessName(ProcessID[serverSelected]) == L"java.exe")
-		{
-			Sleep(1000);
-		}
-
-		isServerRunning[serverSelected] = false;
-		ProcessID[serverSelected] = 0;
-
-		configopen = false;
-		((CButton*)GetDlgItem(IDC_AutoReboot))->SetCheck(0);
-		isAutoReboot[serverSelected] = false;
-		WriteConfig(currentConfig, L"AutoReboot",L"false");
-		configopen = false;
+		SetWindowText(L"BungeeCord Servers Manager (等待服务端关闭...)");
+		DisableControl();
+		sd_reboot = false;
+		SetTimer(TIMER_WAIT, 1000, NULL);
 	}
 }
 
@@ -1521,4 +1535,35 @@ void CBCSManagerDlg::OnMenuPluginslistAddplugin()
 		CopyFile(openFileDlg.GetPathName(), CorePath.Mid(0, CorePath.ReverseFind('\\')) + L"\\plugins\\" + openFileDlg.GetFileTitle(), FALSE);
 		LoadPlugins(currentConfig);
 	}
+}
+
+
+void CBCSManagerDlg::EnableControl()
+{
+	GetDlgItem(IDC_ServerName)->EnableWindow(TRUE);
+	GetDlgItem(IDC_MemAllocate)->EnableWindow(TRUE);
+	GetDlgItem(IDC_AutoReboot)->EnableWindow(TRUE);
+	GetDlgItem(IDC_Btn_Java)->EnableWindow(TRUE);
+	GetDlgItem(IDC_Btn_Core)->EnableWindow(TRUE);
+	GetDlgItem(IDC_JVMExtraParam)->EnableWindow(TRUE);
+	GetDlgItem(IDC_PluginsList)->EnableWindow(TRUE);
+	GetDlgItem(IDC_AffinityList)->EnableWindow(TRUE);
+	GetDlgItem(IDC_Btn_SHConhost)->EnableWindow(TRUE);
+	GetDlgItem(IDC_RebootAndApply)->EnableWindow(TRUE);
+	GetDlgItem(IDC_Shutdown)->EnableWindow(TRUE);
+}
+
+void CBCSManagerDlg::DisableControl()
+{
+	GetDlgItem(IDC_ServerName)->EnableWindow(FALSE);
+	GetDlgItem(IDC_MemAllocate)->EnableWindow(FALSE);
+	GetDlgItem(IDC_AutoReboot)->EnableWindow(FALSE);
+	GetDlgItem(IDC_Btn_Java)->EnableWindow(FALSE);
+	GetDlgItem(IDC_Btn_Core)->EnableWindow(FALSE);
+	GetDlgItem(IDC_JVMExtraParam)->EnableWindow(FALSE);
+	GetDlgItem(IDC_PluginsList)->EnableWindow(FALSE);
+	GetDlgItem(IDC_AffinityList)->EnableWindow(FALSE);
+	GetDlgItem(IDC_Btn_SHConhost)->EnableWindow(FALSE);
+	GetDlgItem(IDC_RebootAndApply)->EnableWindow(FALSE);
+	GetDlgItem(IDC_Shutdown)->EnableWindow(FALSE);
 }
