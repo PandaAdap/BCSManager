@@ -37,6 +37,16 @@ CBCSManagerApp theApp;
 
 BOOL CBCSManagerApp::InitInstance()
 {
+	HANDLE hMutex = ::CreateMutex(NULL, TRUE, L"BCSManager");//text可以随便取一个唯一的名字  
+	if (hMutex != NULL)
+	{
+		if (GetLastError() == ERROR_ALREADY_EXISTS)
+		{
+			AfxMessageBox(L"程序已经在运行.");
+			return FALSE;
+		}
+	}
+
 	CWinApp::InitInstance();
 
 	if (!AfxSocketInit())
