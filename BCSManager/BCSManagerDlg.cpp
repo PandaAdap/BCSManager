@@ -19,6 +19,7 @@
 #define TIMER_WAIT WM_USER+001
 
 UINT MemoryTick(LPVOID lpParam);
+UINT MemoryMonitor(LPVOID lpParam);
 bool closethread = false;
 
 // 用于应用程序“关于”菜单项的 CAboutDlg 对话框
@@ -70,14 +71,13 @@ void CBCSManagerDlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_ServerList, m_ServerList);
 	DDX_Control(pDX, IDC_PluginsList, m_PluginsList);
 	DDX_Control(pDX, IDC_AffinityList, m_AffinityList);
+	DDX_Control(pDX, IDC_List_Log, m_ListLog);
 }
 
 BEGIN_MESSAGE_MAP(CBCSManagerDlg, CDialogEx)
 	ON_WM_SYSCOMMAND()
 	ON_WM_PAINT()
 	ON_WM_QUERYDRAGICON()
-	//ON_BN_CLICKED(IDC_BUTTON1, &CBCSManagerDlg::OnBnClickedButton1)
-	//ON_BN_CLICKED(IDC_BUTTON2, &CBCSManagerDlg::OnBnClickedButton2)
 	ON_BN_CLICKED(IDC_Btn_OpenServerFloder, &CBCSManagerDlg::OnBnClickedBtnOpenserverfloder)
 	ON_BN_CLICKED(IDC_Btn_Java, &CBCSManagerDlg::OnBnClickedBtnJava)
 	ON_BN_CLICKED(IDC_Btn_Core, &CBCSManagerDlg::OnBnClickedBtnCore)
@@ -95,12 +95,13 @@ BEGIN_MESSAGE_MAP(CBCSManagerDlg, CDialogEx)
 	ON_COMMAND(ID_Menu_ServerList_Delete, &CBCSManagerDlg::OnMenuServerlistDelete)
 	ON_BN_CLICKED(IDC_AutoReboot, &CBCSManagerDlg::OnBnClickedAutoreboot)
 	ON_BN_CLICKED(IDC_RebootAndApply, &CBCSManagerDlg::OnBnClickedRebootandapply)
-	ON_WM_TIMER()
 	ON_BN_CLICKED(IDC_Shutdown, &CBCSManagerDlg::OnBnClickedShutdown)
 	ON_BN_CLICKED(IDC_Btn_SHConhost, &CBCSManagerDlg::OnBnClickedBtnShconhost)
 	ON_BN_CLICKED(IDC_Btn_Help_MemAllocate, &CBCSManagerDlg::OnBnClickedBtnHelpMemallocate)
 	ON_BN_CLICKED(IDC_Btn_Help_JVMExtraParam, &CBCSManagerDlg::OnBnClickedBtnHelpJvmextraparam)
 	ON_COMMAND(ID_Menu_PluginsList_AddPlugin, &CBCSManagerDlg::OnMenuPluginslistAddplugin)
+	ON_WM_TIMER()
+	ON_EN_CHANGE(IDC_MemCleanThreshold, &CBCSManagerDlg::OnEnChangeMemcleanthreshold)
 END_MESSAGE_MAP()
 
 
@@ -154,6 +155,7 @@ BOOL CBCSManagerDlg::OnInitDialog()
 	newConfigItems.push_back(L"#JVMExtraParam=");
 	newConfigItems.push_back(L"#AutoReboot=false");
 	newConfigItems.push_back(L"#LastProcessID=0");
+	newConfigItems.push_back(L"#AutoMemClean=0");
 
 	//List Control Init
 	CRect rect;
@@ -173,6 +175,12 @@ BOOL CBCSManagerDlg::OnInitDialog()
 	m_AffinityList.ModifyStyle(0, LVS_SINGLESEL | LVS_REPORT | LVS_SHOWSELALWAYS);
 	m_AffinityList.SetExtendedStyle(m_AffinityList.GetExtendedStyle() | LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES);
 	m_AffinityList.InsertColumn(0, _T("相关性绑定"), rect.Width() - 18, ListCtrlEx::CheckBox, LVCFMT_LEFT);
+
+	m_ListLog.GetClientRect(&rect);
+	m_ListLog.ModifyStyle(0, LVS_SINGLESEL | LVS_REPORT | LVS_SHOWSELALWAYS);
+	m_ListLog.SetExtendedStyle(m_ListLog.GetExtendedStyle() | LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES);
+	m_ListLog.InsertColumn(0, _T("时间"), rect.Width() / 3, ListCtrlEx::Normal, LVCFMT_LEFT);
+	m_ListLog.InsertColumn(1, _T("日志"), rect.Width() / 3 * 2, ListCtrlEx::Normal, LVCFMT_LEFT);
 
 	CString AffinitySet;
 	for (int i = 0; i < CPUCores; i++)
@@ -198,7 +206,7 @@ BOOL CBCSManagerDlg::OnInitDialog()
 	//LaunchQueue();
 
 	tickthread = AfxBeginThread(MemoryTick, this);
-
+	AfxBeginThread(MemoryMonitor, this);
 
 	isInit = false;
 	return TRUE;  // 除非将焦点设置到控件，否则返回 TRUE
@@ -253,6 +261,54 @@ HCURSOR CBCSManagerDlg::OnQueryDragIcon()
 	return static_cast<HCURSOR>(m_hIcon);
 }
 
+//Update Config
+void CBCSManagerDlg::UpdateConfig(CString configName)
+{
+	std::vector<CString> readConfig;
+	CStdioFile configReader;
+	CString readLine = L"";
+	int orig_node_count = 0;
+
+	configReader.Open(configName, CFile::modeRead);
+	while (configReader.ReadString(readLine))
+	{
+		readConfig.push_back(readLine);
+		orig_node_count++;
+	}configReader.Close();
+
+	bool isExist = true;
+	CString NodeName,NodeParam;
+	CString node;
+	for (int index = 0; index < newConfigItems.size(); index++)
+	{
+		isExist = false;
+		NodeName = newConfigItems[index].Mid(1, newConfigItems[index].Find(L"=", 0) - 1);
+		NodeParam = newConfigItems[index].Mid(newConfigItems[index].GetLength(), newConfigItems[index].GetLength() - newConfigItems[index].GetLength());
+		node = L"#" + NodeName + L"=";
+		
+		for (int i = 0; i < orig_node_count; i++)
+		{
+			if (readConfig[i].Find(node, 0) == 0)
+			{
+				isExist = true;
+				break;
+			}
+		}
+		if (isExist == false)
+		{
+			readConfig.push_back(node + NodeParam);
+		}
+	}
+
+	configReader.Open(configName, CFile::modeCreate | CFile::modeReadWrite);
+	for (int line = 0; line < readConfig.size(); line++)
+	{
+		configReader.WriteString(readConfig[line] + L"\n");
+	}
+	configReader.Close();
+
+}
+
 //Create Config
 int CBCSManagerDlg::CreateConfig()
 {
@@ -290,15 +346,27 @@ void CBCSManagerDlg::LoadConfig()
 	serverLaunch.clear();
 	isServerRunning.clear();
 	isAutoReboot.clear();
+	isAutoMemClean.clear();
+	memRecord.clear();
 	m_ServerList.DeleteAllItems();
-	CString configName;
+	CString configName, MemAllocateSet;
 	for (int count = 0; count < 20; count++)
 	{
 		configName.Format(L".\\BCSConfig\\BCSConfig%02d.bcscfg", count);
+
 		CFileFind finder;
 		BOOL ifFind = finder.FindFile(configName);
 		if (ifFind)
 		{
+			if (isInit == true)
+			{
+				UpdateConfig(configName);
+			}
+
+			memRecord.push_back(0);
+			MemAllocateSet = ReadConfig(configName, L"MemoryAllocate");
+			mem_preAllocateMax.push_back(_ttoi(MemAllocateSet.Mid(MemAllocateSet.ReverseFind('-') + 1, MemAllocateSet.GetLength() - MemAllocateSet.ReverseFind('-') - 2)));
+
 			configLoaded.push_back(configName);
 			m_ServerList.InsertItem(count, ReadConfig(configName,L"ServerName"));
 			
@@ -321,6 +389,8 @@ void CBCSManagerDlg::LoadConfig()
 			{
 				isAutoReboot.push_back(false);
 			}
+
+			isAutoMemClean.push_back(_ttoi(ReadConfig(configName, L"AutoMemClean")));
 
 			//Check isRunning
 			if (GetProcessName(_ttoi(ReadConfig(configName, L"LastProcessID"))) == L"java.exe")
@@ -397,13 +467,13 @@ int CBCSManagerDlg::WriteConfig(CString configName, CString NodeName, CString Pa
 int CBCSManagerDlg::ShowConfig(CString configName)
 {
 	CString MemAllocateSet = ReadConfig(configName, L"MemoryAllocate");
-	mem_preAllocateMax = _ttoi(MemAllocateSet.Mid(MemAllocateSet.ReverseFind('-') + 1, MemAllocateSet.GetLength() - MemAllocateSet.ReverseFind('-') - 2));
 
 	SetDlgItemText(IDC_ServerName, ReadConfig(configName, L"ServerName"));
 	SetDlgItemText(IDC_MemAllocate, MemAllocateSet);
 	SetDlgItemText(IDC_JavaEnviroument, ReadConfig(configName, L"JavaPath"));
 	SetDlgItemText(IDC_CorePath, ReadConfig(configName, L"CorePath"));
-	SetDlgItemText(IDC_JVMExtraParam, ReadConfig(configName, L"JVMExtraParam"));
+	SetDlgItemText(IDC_JVMExtraParam, ReadConfig(configName, L"JVMExtraParam")); 
+	SetDlgItemText(IDC_MemCleanThreshold, ReadConfig(configName, L"AutoMemClean"));
 
 	if (ReadConfig(configName, L"AutoReboot") == L"true")
 	{
@@ -1105,7 +1175,7 @@ float GetProcessMemory(DWORD pid)
 					dwMem += si.dwPageSize;
 				}
 			}
-			delete pBuf;
+			free(pBuf);
 			pBuf = NULL;
 			if (workSet.NumberOfEntries > 0)
 			{
@@ -1151,7 +1221,7 @@ UINT MemoryTick(LPVOID lpParam)
 				strShow.Format(L"内存(服务端占用): %.2f%% [%.1f MB]", (AppUsage / physical_memory) * 100, AppUsage);
 				obj->SetDlgItemText(IDC_MemUsageAppTotal, strShow);
 
-				strShow.Format(L"内存(预分配占用): %.2f%% [%.1f MB]", (AppUsage / obj->mem_preAllocateMax) * 100, AppUsage);
+				strShow.Format(L"内存(预分配占用): %.2f%% [%.1f MB]", (AppUsage / obj->mem_preAllocateMax[obj->serverSelected]) * 100, AppUsage);
 				obj->SetDlgItemText(IDC_MemUsagePreAllocate, strShow);
 			}
 
@@ -1161,6 +1231,8 @@ UINT MemoryTick(LPVOID lpParam)
 				{
 					obj->m_ServerList.SetItemText(count, 1, L"0.00%");
 					obj->m_ServerList.SetItemText(count, 2, L"0.00%");
+
+					obj->memRecord[count] = 0;
 					continue;
 				}
 
@@ -1168,6 +1240,7 @@ UINT MemoryTick(LPVOID lpParam)
 				if (PID != 0)
 				{
 					float AppUsage = GetProcessMemory(PID);
+					obj->memRecord[count] = (AppUsage / obj->mem_preAllocateMax[obj->serverSelected]) * 100;
 					strShow.Format(L"%.2f%%", (AppUsage / physical_memory) * 100);
 					obj->m_ServerList.SetItemText(count, 2, strShow);
 					strShow.Format(L"%.2f%%", GetProcessCPU(PID, 12));
@@ -1175,11 +1248,54 @@ UINT MemoryTick(LPVOID lpParam)
 				}
 			}
 		}
-		Sleep(500);
+		Sleep(800);
 	}
 
 	return 0;
 }
+
+//MemoryTick
+UINT MemoryMonitor(LPVOID lpParam)
+{
+	CBCSManagerDlg* obj = (CBCSManagerDlg*)lpParam;
+
+	CMainHWnd GetHwnd;
+	HWND winHWND = NULL;
+	CString strShow,ins = L"lr gc";
+	int PID = 0;
+
+	while (1)
+	{
+		for (int loop_index = 0; loop_index < obj->memRecord.size(); loop_index++)
+		{
+			if (obj->isAutoMemClean[loop_index] <= 60 || obj->isAutoMemClean[loop_index] >= 100)
+			{
+				continue;
+			}
+			if (obj->memRecord[loop_index] > obj->isAutoMemClean[loop_index])
+			{
+				strShow.Format(L"Memory GC: %d", obj->memRecord[loop_index]);
+				obj->AddLogInfo(strShow);
+				GetHwnd.EnumWndsByPid(obj->ProcessID[loop_index]);
+				winHWND = GetHwnd.GetWinHWND();
+
+				for (int i = 0; i < ins.GetLength(); i++)
+				{
+					wchar_t psText_Unicode[1] = { 's' };
+					wcscpy(psText_Unicode, (LPCWSTR)ins.Mid(i, 1));
+					::SendMessage(winHWND, WM_IME_CHAR, psText_Unicode[0], 0);
+				}
+				Sleep(500);
+				::PostMessage(winHWND, WM_KEYDOWN, 13, 0);
+				::PostMessage(winHWND, WM_KEYUP, 13, 0);
+			}
+		}
+		Sleep(10000);
+	}
+
+	return 0;
+}
+
 
 //Timer
 void CBCSManagerDlg::OnTimer(UINT_PTR nIDEvent)
@@ -1212,6 +1328,9 @@ void CBCSManagerDlg::OnTimer(UINT_PTR nIDEvent)
 			{
 				ApplyPluginChange();
 				ApplyAffinityChange();
+				CString MemThreshold;
+				GetDlgItemText(IDC_MemCleanThreshold, MemThreshold);
+				WriteConfig(currentConfig, L"AutoMemClean", MemThreshold);
 
 				//Launch Server
 				CString PID;
@@ -1473,7 +1592,6 @@ CString CBCSManagerDlg::GetAffinityMask(CString configName)
 			Mask += L"0";
 		}
 	}
-
 	return Mask;
 }
 
@@ -1508,7 +1626,7 @@ void CBCSManagerDlg::OnBnClickedBtnHelpMemallocate()
 	MessageBox(L"格式: 最小值-最大值(目前仅支持M)\r\n例: 128M-4096M");
 }
 
-
+//Help Info JvmExtParam
 void CBCSManagerDlg::OnBnClickedBtnHelpJvmextraparam()
 {
 	MessageBox(L"每个参数之间用空格隔开.\r\n例: -server -XX:+UseG1GC");
@@ -1537,6 +1655,22 @@ void CBCSManagerDlg::OnMenuPluginslistAddplugin()
 	}
 }
 
+//Log Info
+void CBCSManagerDlg::AddLogInfo(CString log)
+{
+	CTime tm = CTime::GetCurrentTime();
+	int time_month = tm.GetMonth(),
+		time_day = tm.GetDay(),
+		time_hour = tm.GetHour(),
+		time_minute = tm.GetMinute();
+
+	CString timeShow;
+	timeShow.Format(L"%d-%d %d:%d", time_month, time_day, time_hour, time_minute);
+
+	//int item = m_ListLog.GetItemCount();
+	m_ListLog.InsertItem(0, timeShow);
+	m_ListLog.SetItemText(0, 1, log);
+}
 
 void CBCSManagerDlg::EnableControl()
 {
@@ -1551,6 +1685,7 @@ void CBCSManagerDlg::EnableControl()
 	GetDlgItem(IDC_Btn_SHConhost)->EnableWindow(TRUE);
 	GetDlgItem(IDC_RebootAndApply)->EnableWindow(TRUE);
 	GetDlgItem(IDC_Shutdown)->EnableWindow(TRUE);
+	GetDlgItem(IDC_MemCleanThreshold)->EnableWindow(TRUE);
 }
 
 void CBCSManagerDlg::DisableControl()
@@ -1566,4 +1701,14 @@ void CBCSManagerDlg::DisableControl()
 	GetDlgItem(IDC_Btn_SHConhost)->EnableWindow(FALSE);
 	GetDlgItem(IDC_RebootAndApply)->EnableWindow(FALSE);
 	GetDlgItem(IDC_Shutdown)->EnableWindow(FALSE);
+	GetDlgItem(IDC_MemCleanThreshold)->EnableWindow(FALSE);
+}
+
+//Memory Clean Threshold
+void CBCSManagerDlg::OnEnChangeMemcleanthreshold()
+{
+	if (isInit == true)
+		return;
+
+	isAutoMemClean[serverSelected] = (float)GetDlgItemInt(IDC_MemCleanThreshold);
 }

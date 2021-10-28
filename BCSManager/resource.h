@@ -33,6 +33,8 @@
 #define IDC_RebootAndApply              1023
 #define IDC_Shutdown                    1024
 #define IDC_MemUsageAppTotal            1025
+#define IDC_List_Log                    1027
+#define IDC_MemCleanThreshold           1028
 #define ID_SERVERLIST_32771             32771
 #define ID_SERVERLIST_32772             32772
 #define ID_Menu_ServerList_New          32773
@@ -50,7 +52,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        134
 #define _APS_NEXT_COMMAND_VALUE         32781
-#define _APS_NEXT_CONTROL_VALUE         1025
+#define _APS_NEXT_CONTROL_VALUE         1029
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

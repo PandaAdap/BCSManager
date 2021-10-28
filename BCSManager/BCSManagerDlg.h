@@ -80,8 +80,9 @@ public:
 	std::vector<bool> isServerRunning;
 	std::vector<bool> serverLaunch;
 	std::vector<bool> isAutoReboot;
+	std::vector<int> isAutoMemClean, memRecord, mem_preAllocateMax;
 	CString currentConfig;
-	int mem_preAllocateMax = 0;
+	//int mem_preAllocateMax = 0;
 	int serverSelected = -1;
 
 	bool configopen = false;
@@ -110,9 +111,13 @@ public:
 
 	BOOL KillProcess(DWORD PID);
 
+	void AddLogInfo(CString log);
+	void UpdateConfig(CString configName);
+
 	ListCtrlEx::CListCtrlEx m_ServerList;
 	ListCtrlEx::CListCtrlEx m_PluginsList;
 	ListCtrlEx::CListCtrlEx m_AffinityList;
+	ListCtrlEx::CListCtrlEx m_ListLog;
 	afx_msg void OnBnClickedBtnOpenserverfloder();
 	afx_msg void OnBnClickedBtnJava();
 	afx_msg void OnBnClickedBtnCore();
@@ -136,4 +141,5 @@ public:
 	afx_msg void OnBnClickedBtnHelpMemallocate();
 	afx_msg void OnBnClickedBtnHelpJvmextraparam();
 	afx_msg void OnMenuPluginslistAddplugin();
+	afx_msg void OnEnChangeMemcleanthreshold();
 };
