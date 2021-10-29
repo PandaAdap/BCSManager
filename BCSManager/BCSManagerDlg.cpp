@@ -1274,8 +1274,10 @@ UINT MemoryMonitor(LPVOID lpParam)
 			}
 			if (obj->memRecord[loop_index] > obj->isAutoMemClean[loop_index])
 			{
-				strShow.Format(L"Memory GC: %d", obj->memRecord[loop_index]);
-				obj->AddLogInfo(strShow);
+				strShow.Format(L"Memory GC (%.1f%%).", obj->memRecord[loop_index]);
+				obj->configopen == false;
+				obj->AddLogInfo(L"[" + obj->ReadConfig(obj->configLoaded[loop_index], L"ServerName") + L"] : " + strShow);
+				obj->configopen == true;
 				GetHwnd.EnumWndsByPid(obj->ProcessID[loop_index]);
 				winHWND = GetHwnd.GetWinHWND();
 
@@ -1295,7 +1297,6 @@ UINT MemoryMonitor(LPVOID lpParam)
 
 	return 0;
 }
-
 
 //Timer
 void CBCSManagerDlg::OnTimer(UINT_PTR nIDEvent)
@@ -1710,5 +1711,5 @@ void CBCSManagerDlg::OnEnChangeMemcleanthreshold()
 	if (isInit == true)
 		return;
 
-	isAutoMemClean[serverSelected] = (float)GetDlgItemInt(IDC_MemCleanThreshold);
+	isAutoMemClean[(serverSelected < 0 ? 0 : serverSelected)] = (float)GetDlgItemInt(IDC_MemCleanThreshold);
 }

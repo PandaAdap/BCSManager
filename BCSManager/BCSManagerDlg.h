@@ -80,7 +80,8 @@ public:
 	std::vector<bool> isServerRunning;
 	std::vector<bool> serverLaunch;
 	std::vector<bool> isAutoReboot;
-	std::vector<int> isAutoMemClean, memRecord, mem_preAllocateMax;
+	std::vector<int> isAutoMemClean, mem_preAllocateMax;
+	std::vector<float> memRecord;
 	CString currentConfig;
 	//int mem_preAllocateMax = 0;
 	int serverSelected = -1;
