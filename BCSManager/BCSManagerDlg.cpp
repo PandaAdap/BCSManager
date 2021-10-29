@@ -156,6 +156,7 @@ BOOL CBCSManagerDlg::OnInitDialog()
 	newConfigItems.push_back(L"#AutoReboot=false");
 	newConfigItems.push_back(L"#LastProcessID=0");
 	newConfigItems.push_back(L"#AutoMemClean=0");
+	newConfigItems.push_back(L"#LastWinHWND=0");
 
 	//List Control Init
 	CRect rect;
@@ -1240,7 +1241,7 @@ UINT MemoryTick(LPVOID lpParam)
 				if (PID != 0)
 				{
 					float AppUsage = GetProcessMemory(PID);
-					obj->memRecord[count] = (AppUsage / obj->mem_preAllocateMax[obj->serverSelected]) * 100;
+					obj->memRecord[count] = AppUsage;
 					strShow.Format(L"%.2f%%", (AppUsage / physical_memory) * 100);
 					obj->m_ServerList.SetItemText(count, 2, strShow);
 					strShow.Format(L"%.2f%%", GetProcessCPU(PID, 12));
@@ -1262,7 +1263,6 @@ UINT MemoryMonitor(LPVOID lpParam)
 	CMainHWnd GetHwnd;
 	HWND winHWND = NULL;
 	CString strShow,ins = L"lr gc";
-	int PID = 0;
 
 	while (1)
 	{
@@ -1272,14 +1272,16 @@ UINT MemoryMonitor(LPVOID lpParam)
 			{
 				continue;
 			}
-			if (obj->memRecord[loop_index] > obj->isAutoMemClean[loop_index])
+			float mem_precent = obj->memRecord[loop_index] / obj->mem_preAllocateMax[loop_index] * 100;
+			if (mem_precent > obj->isAutoMemClean[loop_index])
 			{
-				strShow.Format(L"Memory GC (%.1f%%).", obj->memRecord[loop_index]);
+				strShow.Format(L"Memory GC (%.1f%%).", mem_precent);
 				obj->configopen == false;
 				obj->AddLogInfo(L"[" + obj->ReadConfig(obj->configLoaded[loop_index], L"ServerName") + L"] : " + strShow);
+				
+				//GetHwnd.EnumWndsByPid(obj->ProcessID[loop_index]);
+				winHWND = (HWND)_ttoi(obj->ReadConfig(obj->configLoaded[loop_index], L"LastWinHWND"));//GetHwnd.GetWinHWND();
 				obj->configopen == true;
-				GetHwnd.EnumWndsByPid(obj->ProcessID[loop_index]);
-				winHWND = GetHwnd.GetWinHWND();
 
 				for (int i = 0; i < ins.GetLength(); i++)
 				{
